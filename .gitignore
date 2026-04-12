@@ -6,3 +6,15 @@
 /exemples_dataset.png
 /models
 /venv
+
+/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.log
+*.bak
+*.tmp
+/.DS_Store
+/.idea
+/.vscode
