@@ -4,6 +4,7 @@ import cv2
 import matplotlib.pyplot as plt
 from tensorflow.keras.utils import to_categorical
 from sklearn.utils import shuffle
+from sklearn.model_selection import train_test_split
 
 # =============================================================
 # CONFIGURATION CENTRALE
@@ -25,11 +26,13 @@ CACHE_DIR = os.path.join('data', 'cache')
 
 # Noms des fichiers cache
 CACHE_FILES = {
-    'X_train': os.path.join(CACHE_DIR, 'X_train.npy'),
-    'y_train': os.path.join(CACHE_DIR, 'y_train.npy'),
+    'X_train':     os.path.join(CACHE_DIR, 'X_train.npy'),
+    'y_train':     os.path.join(CACHE_DIR, 'y_train.npy'),
     'y_train_raw': os.path.join(CACHE_DIR, 'y_train_raw.npy'),
-    'X_test':  os.path.join(CACHE_DIR, 'X_test.npy'),
-    'y_test':  os.path.join(CACHE_DIR, 'y_test.npy'),
+    'X_val':       os.path.join(CACHE_DIR, 'X_val.npy'),
+    'y_val':       os.path.join(CACHE_DIR, 'y_val.npy'),
+    'X_test':      os.path.join(CACHE_DIR, 'X_test.npy'),
+    'y_test':      os.path.join(CACHE_DIR, 'y_test.npy'),
     'y_test_raw':  os.path.join(CACHE_DIR, 'y_test_raw.npy'),
 }
 
@@ -44,7 +47,15 @@ def charger_image(chemin_image):
     image = cv2.resize(image, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_AREA)
     image = image.astype('float32') / 255.0
     return image
-
+# def charger_image(chemin_image):
+#     image = cv2.imread(chemin_image)
+#     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+#     image = cv2.resize(image, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_AREA)
+    
+#     # ⚠️ CHANGEMENT : on garde les valeurs dans [0, 255]
+#     # Ne PAS diviser par 255 ici
+#     image = image.astype('float32')  # juste conversion de type
+#     return image
 
 def charger_dataset(chemin_dossier):
     images = []
@@ -85,25 +96,18 @@ def charger_dataset(chemin_dossier):
 # ce travail avant ?" et agit en conséquence.
 # =============================================================
 
-def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=False):
+def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=True):
     """
     Point d'entrée unique pour obtenir les données.
     Gère automatiquement le cache.
 
-    Paramètres :
-        chemin_train    : chemin vers data/Training
-        chemin_test     : chemin vers data/Testing
-        forcer_recalcul : si True, ignore le cache et refait tout
-                          (utile si tu changes le dataset ou IMG_SIZE)
+    Retourne : X_train, y_train, y_train_raw, X_val, y_val, X_test, y_test, y_test_raw
 
-    Retourne : X_train, y_train, y_train_raw, X_test, y_test, y_test_raw
+    Les 3 ensembles ont des rôles distincts :
+      X_train  → le modèle apprend dessus (80% du dossier Training/)
+      X_val    → EarlyStopping surveille ici (20% du dossier Training/)
+      X_test   → touché UNE SEULE FOIS à la toute fin pour le score final
     """
-
-    # --- CAS 1 : le cache existe et on ne force pas le recalcul ---
-    #
-    # all() retourne True seulement si TOUTES les conditions sont vraies.
-    # On vérifie que chacun des 6 fichiers .npy existe bien sur le disque.
-    # Si un seul manque, on refait tout (évite les données incomplètes).
 
     cache_complet = all(os.path.exists(f) for f in CACHE_FILES.values())
 
@@ -114,12 +118,14 @@ def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=False):
         X_train     = np.load(CACHE_FILES['X_train'])
         y_train     = np.load(CACHE_FILES['y_train'])
         y_train_raw = np.load(CACHE_FILES['y_train_raw'])
+        X_val       = np.load(CACHE_FILES['X_val'])
+        y_val       = np.load(CACHE_FILES['y_val'])
         X_test      = np.load(CACHE_FILES['X_test'])
         y_test      = np.load(CACHE_FILES['y_test'])
         y_test_raw  = np.load(CACHE_FILES['y_test_raw'])
 
-        _afficher_resume(X_train, y_train, X_test, y_test)
-        return X_train, y_train, y_train_raw, X_test, y_test, y_test_raw
+        _afficher_resume(X_train, y_train, X_val, y_val, X_test, y_test)
+        return X_train, y_train, y_train_raw, X_val, y_val, X_test, y_test, y_test_raw
 
     # --- CAS 2 : pas de cache, ou recalcul forcé ---
 
@@ -130,28 +136,51 @@ def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=False):
         print("(Ce traitement ne se fera qu'une seule fois)")
 
     print("\nTraitement du Training set...")
-    X_train, y_train, y_train_raw = charger_dataset(chemin_train)
+    X_train_complet, y_train_complet, y_train_complet_raw = charger_dataset(chemin_train)
 
-    print("\nTraitement du Testing set...")
+    # --- SPLIT TRAIN / VALIDATION ---
+    # On coupe le dossier Training/ en deux parties :
+    #   80% → X_train  : le modèle apprend dessus
+    #   20% → X_val    : EarlyStopping surveille ce chiffre
+    #
+    # stratify=y_train_complet_raw garantit que chaque classe
+    # est représentée proportionnellement dans les deux parties.
+    # Ex : si on a 1400 gliomas, on aura ~1120 en train et ~280 en val.
+    #
+    # IMPORTANT : X_test (dossier Testing/) reste complètement intact.
+    # Il ne sera utilisé qu'une seule fois à la toute fin.
+    print("\nCréation du split train / validation (80% / 20%)...")
+    X_train, X_val, y_train, y_val, y_train_raw, _ = train_test_split(
+        X_train_complet,
+        y_train_complet,
+        y_train_complet_raw,
+        test_size=0.2,
+        random_state=42,
+        stratify=y_train_complet_raw  # proportions de classes conservées
+    )
+
+    print(f"  X_train : {X_train.shape[0]} images")
+    print(f"  X_val   : {X_val.shape[0]} images")
+
+    print("\nTraitement du Testing set (sera touché une seule fois à la fin)...")
     X_test, y_test, y_test_raw = charger_dataset(chemin_test)
 
     # --- Sauvegarde du cache ---
-    #
-    # os.makedirs crée le dossier data/cache/ s'il n'existe pas.
-    # exist_ok=True évite une erreur si le dossier existe déjà.
     os.makedirs(CACHE_DIR, exist_ok=True)
 
     print(f"\nSauvegarde du cache dans '{CACHE_DIR}/'...")
     np.save(CACHE_FILES['X_train'],     X_train)
     np.save(CACHE_FILES['y_train'],     y_train)
     np.save(CACHE_FILES['y_train_raw'], y_train_raw)
+    np.save(CACHE_FILES['X_val'],       X_val)
+    np.save(CACHE_FILES['y_val'],       y_val)
     np.save(CACHE_FILES['X_test'],      X_test)
     np.save(CACHE_FILES['y_test'],      y_test)
     np.save(CACHE_FILES['y_test_raw'],  y_test_raw)
     print("  Sauvegarde terminée — les prochains lancements seront rapides.")
 
-    _afficher_resume(X_train, y_train, X_test, y_test)
-    return X_train, y_train, y_train_raw, X_test, y_test, y_test_raw
+    _afficher_resume(X_train, y_train, X_val, y_val, X_test, y_test)
+    return X_train, y_train, y_train_raw, X_val, y_val, X_test, y_test, y_test_raw
 
 
 # =============================================================
@@ -204,12 +233,14 @@ def visualiser_distribution(y_original, titre="Distribution des classes"):
 # pas destinée à être appelée depuis main.py
 # =============================================================
 
-def _afficher_resume(X_train, y_train, X_test, y_test):
-    print("\n" + "=" * 42)
+def _afficher_resume(X_train, y_train, X_val, y_val, X_test, y_test):
+    print("\n" + "=" * 48)
     print("DONNÉES PRÊTES")
-    print("=" * 42)
-    print(f"  X_train : {X_train.shape}   ~{X_train.nbytes / 1e6:.0f} MB")
+    print("=" * 48)
+    print(f"  X_train : {X_train.shape}  — modèle apprend ici")
     print(f"  y_train : {y_train.shape}")
-    print(f"  X_test  : {X_test.shape}    ~{X_test.nbytes / 1e6:.0f} MB")
+    print(f"  X_val   : {X_val.shape}  — EarlyStopping surveille ici")
+    print(f"  y_val   : {y_val.shape}")
+    print(f"  X_test  : {X_test.shape}  — touché une seule fois à la fin")
     print(f"  y_test  : {y_test.shape}")
-    print("=" * 42)
+    print("=" * 48)
