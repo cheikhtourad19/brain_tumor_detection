@@ -1,4 +1,6 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 from src.preprocessing import obtenir_donnees
 from src.preprocessing_tl import obtenir_donnees as obtenir_donnees_tl
 import numpy as np
@@ -29,9 +31,7 @@ CHEMIN_TRAIN = os.path.join('data', 'Training')
 CHEMIN_TEST  = os.path.join('data', 'Testing')
 
 def lancer_entrainement():
-    # =========================================================
-    # ÉTAPE 1 : Charger les données (avec cache automatique)
-    # =========================================================
+    # ÉTAPE 1 : Charger les données
     X_train, y_train, y_train_raw, \
     X_val,   y_val,                \
     X_test,  y_test,  y_test_raw = obtenir_donnees(
@@ -41,27 +41,35 @@ def lancer_entrainement():
     )
 
     # =========================================================
-    # ÉTAPE 2 : Construire le modèle
+    # ✅ NOUVEAU : Class weights
+    # On dit au modèle : "les erreurs sur meningioma et glioma
+    # comptent plus que les autres"
     # =========================================================
+    from sklearn.utils.class_weight import compute_class_weight
+
+    classes = np.unique(y_train_raw)
+    weights = compute_class_weight('balanced', classes=classes, y=y_train_raw)
+    class_weight = {int(c): float(w) for c, w in zip(classes, weights)}
+
+    # Boost manuel des classes difficiles
+    class_weight[1] = 2.5   # meningioma — le pire
+    class_weight[3] = 1.8   # glioma — deuxième pire
+
+    print(f"\nClass weights appliqués : {class_weight}")
+    # Affichera : {0: 1.0, 1: 2.5, 2: 1.0, 3: 1.8}
+
+    # ÉTAPE 2 : Construire le modèle
     model = construire_modele()
     afficher_architecture(model)
 
-    # =========================================================
-    # ÉTAPE 3 : Entraîner
-    # =========================================================
-    historique = entrainer_modele(model, X_train, y_train, X_val, y_val)
+    # ÉTAPE 3 : Entraîner — on passe class_weight ici
+    historique = entrainer_modele(model, X_train, y_train, X_val, y_val,
+                                  class_weight=class_weight)  # ← ajout
 
-    # =========================================================
-    # ÉTAPE 4 : Visualiser les résultats
-    # =========================================================
+    # ÉTAPE 4, 5 : inchangées
     afficher_courbes(historique)
-
-    # =========================================================
-    # ÉTAPE 5 : Sauvegarder puis évaluer sur X_test
-    # =========================================================
     sauvegarder_modele(model)
     executer_evaluation_complete(X_test, y_test, y_test_raw)
-
 
 def lancer_evaluation_seule():
     # =========================================================
@@ -73,7 +81,7 @@ def lancer_evaluation_seule():
     X_test, y_test, y_test_raw = obtenir_donnees(
         CHEMIN_TRAIN,
         CHEMIN_TEST,
-        forcer_recalcul=False
+        forcer_recalcul=True
     )
 
     executer_evaluation_complete(X_test, y_test, y_test_raw)
@@ -97,10 +105,19 @@ def lancer_transfer_learning():
     model = construire_modele_tl()
     afficher_architecture_tl(model)
 
+    labels = y_train_raw
+    classes = np.unique(labels)
+    weights = compute_class_weight('balanced', classes=classes, y=labels)
+    class_weight = {int(c): float(w) for c, w in zip(classes, weights)}
+    class_weight[1] = 2.5
+    class_weight[3] = 1.8
+    print(f"Class weights: {class_weight}")
+
     # =========================================================
     # ÉTAPE 3 : Entraîner
     # =========================================================
-    historique = entrainer_modele_tl(model, X_train, y_train, X_val, y_val)
+    historique = entrainer_modele_tl(model, X_train, y_train, X_val, y_val,
+                                     class_weight=class_weight)
 
     # =========================================================
     # ÉTAPE 3b : Fine-tuning (dégeler dernières couches du backbone)

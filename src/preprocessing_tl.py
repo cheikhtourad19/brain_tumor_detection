@@ -1,26 +1,20 @@
 import os
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
 from tensorflow.keras.utils import to_categorical
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 
-# =============================================================
-# CONFIGURATION DEDIEE AU TRANSFER LEARNING
-# =============================================================
-
-IMG_SIZE = 160
+IMG_SIZE = 224
 NUM_CLASSES = 4
 
 CLASS_MAPPING = {
     'notumor':    0,
     'meningioma': 1,
     'pituitary':  2,
-    'glioma':     3,
+    'glioma':     3
 }
 
-# Cache séparé pour éviter de mélanger baseline et TL
 CACHE_DIR = os.path.join('data', 'cache_tl')
 
 CACHE_FILES = {
@@ -39,7 +33,7 @@ def charger_image(chemin_image):
     image = cv2.imread(chemin_image)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = cv2.resize(image, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_AREA)
-    image = image.astype('float32') / 255.0
+    image = image.astype('float32')
     return image
 
 
@@ -47,7 +41,7 @@ def charger_dataset(chemin_dossier):
     images = []
     labels = []
 
-    print(f"\n  Lecture TL depuis : {chemin_dossier}")
+    print(f"\n  Lecture depuis : {chemin_dossier}")
 
     for nom_classe in os.listdir(chemin_dossier):
         if nom_classe not in CLASS_MAPPING:
@@ -74,13 +68,11 @@ def charger_dataset(chemin_dossier):
     return X, y_onehot, y
 
 
-def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=False):
+def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=True):
     cache_complet = all(os.path.exists(f) for f in CACHE_FILES.values())
 
     if cache_complet and not forcer_recalcul:
-        print("Cache TL trouvé — chargement rapide des données prétraitées...")
-        print(f"  (supprime '{CACHE_DIR}/' pour forcer un recalcul)")
-
+        print("Cache TL trouvé — chargement rapide...")
         X_train     = np.load(CACHE_FILES['X_train'])
         y_train     = np.load(CACHE_FILES['y_train'])
         y_train_raw = np.load(CACHE_FILES['y_train_raw'])
@@ -94,15 +86,12 @@ def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=False):
         return X_train, y_train, y_train_raw, X_val, y_val, X_test, y_test, y_test_raw
 
     if forcer_recalcul:
-        print("Recalcul TL forcé — on ignore le cache existant.")
-    else:
-        print("Aucun cache TL trouvé — prétraitement complet en cours...")
-        print("(Ce traitement ne se fera qu'une seule fois)")
+        print("Recalcul forcé — prétraitement TL en cours...")
 
-    print("\nTraitement du Training set TL...")
+    print("\nTraitement du Training set...")
     X_train_complet, y_train_complet, y_train_complet_raw = charger_dataset(chemin_train)
 
-    print("\nCréation du split train / validation TL (80% / 20%)...")
+    print("\nCréation du split train / validation (80% / 20%)...")
     X_train, X_val, y_train, y_val, y_train_raw, _ = train_test_split(
         X_train_complet,
         y_train_complet,
@@ -115,11 +104,10 @@ def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=False):
     print(f"  X_train : {X_train.shape[0]} images")
     print(f"  X_val   : {X_val.shape[0]} images")
 
-    print("\nTraitement du Testing set TL (touché une seule fois à la fin)...")
+    print("\nTraitement du Testing set...")
     X_test, y_test, y_test_raw = charger_dataset(chemin_test)
 
     os.makedirs(CACHE_DIR, exist_ok=True)
-
     print(f"\nSauvegarde du cache TL dans '{CACHE_DIR}/'...")
     np.save(CACHE_FILES['X_train'],     X_train)
     np.save(CACHE_FILES['y_train'],     y_train)
@@ -129,7 +117,7 @@ def obtenir_donnees(chemin_train, chemin_test, forcer_recalcul=False):
     np.save(CACHE_FILES['X_test'],      X_test)
     np.save(CACHE_FILES['y_test'],      y_test)
     np.save(CACHE_FILES['y_test_raw'],  y_test_raw)
-    print("  Sauvegarde terminée — les prochains lancements TL seront rapides.")
+    print("  Sauvegarde terminée.")
 
     _afficher_resume(X_train, y_train, X_val, y_val, X_test, y_test)
     return X_train, y_train, y_train_raw, X_val, y_val, X_test, y_test, y_test_raw
@@ -139,10 +127,10 @@ def _afficher_resume(X_train, y_train, X_val, y_val, X_test, y_test):
     print("\n" + "=" * 48)
     print("DONNÉES TL PRÊTES")
     print("=" * 48)
-    print(f"  X_train : {X_train.shape}  — modèle TL apprend ici")
+    print(f"  X_train : {X_train.shape}")
     print(f"  y_train : {y_train.shape}")
-    print(f"  X_val   : {X_val.shape}  — EarlyStopping surveille ici")
+    print(f"  X_val   : {X_val.shape}")
     print(f"  y_val   : {y_val.shape}")
-    print(f"  X_test  : {X_test.shape}  — touché une seule fois à la fin")
+    print(f"  X_test  : {X_test.shape}")
     print(f"  y_test  : {y_test.shape}")
     print("=" * 48)

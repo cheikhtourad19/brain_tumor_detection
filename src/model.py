@@ -5,7 +5,7 @@ from tensorflow.keras.layers import (
     GlobalAveragePooling2D, RandomFlip, RandomRotation,
     RandomZoom, RandomContrast
 )
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers.legacy import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.regularizers import l2
 import matplotlib.pyplot as plt
@@ -149,12 +149,8 @@ def afficher_architecture(model):
     print("=" * 55)
 
 
-def entrainer_modele(model, X_train, y_train, X_val, y_val):
-    """
-    Lance l'entraînement et retourne l'historique des métriques.
-    EarlyStopping arrête si val_loss ne s'améliore plus (patience=4).
-    ReduceLROnPlateau réduit le LR de 50% après 2 epochs sans amélioration.
-    """
+def entrainer_modele(model, X_train, y_train, X_val, y_val, class_weight=None):
+    #                                                         ↑ ajout ici
 
     print("\n" + "=" * 55)
     print("ENTRAÎNEMENT")
@@ -165,7 +161,7 @@ def entrainer_modele(model, X_train, y_train, X_val, y_val):
     print(f"Batch size    : {BATCH_SIZE}")
     print(f"Augmentation  : {'ON' if USE_AUGMENTATION else 'OFF'}")
     print("Early stop    : monitor=val_loss, patience=4")
-    print("LR scheduler  : ReduceLROnPlateau (réduit de 50% après 2 epochs sans amélioration)")
+    print("LR scheduler  : ReduceLROnPlateau")
     print()
 
     callbacks = [
@@ -177,8 +173,8 @@ def entrainer_modele(model, X_train, y_train, X_val, y_val):
         ),
         ReduceLROnPlateau(
             monitor='val_loss',
-            factor=0.5,     # divise le LR par 2
-            patience=2,     # après 2 epochs sans amélioration
+            factor=0.5,
+            patience=2,
             min_lr=1e-6,
             verbose=1
         )
@@ -190,11 +186,11 @@ def entrainer_modele(model, X_train, y_train, X_val, y_val):
         batch_size=BATCH_SIZE,
         validation_data=(X_val, y_val),
         callbacks=callbacks,
+        class_weight=class_weight,   # ← ajout ici
         verbose=1
     )
 
     return historique
-
 
 def afficher_courbes(historique):
     """
