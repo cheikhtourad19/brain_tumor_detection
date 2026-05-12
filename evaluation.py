@@ -14,6 +14,8 @@ Ce fichier contient TOUTES les métriques demandées par le CdC :
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import os
+from datetime import datetime
 
 from sklearn.metrics import (
     classification_report,
@@ -126,7 +128,7 @@ def afficher_score_global(model, X_test, y_test):
 #   C'est dangereux en médecine (faux négatif sur tumeur maligne)
 # =============================================================
 
-def afficher_matrice_confusion(y_test_raw, y_pred):
+def afficher_matrice_confusion(y_test_raw, y_pred, dossier_resultats="."):
     """
     Affiche et sauvegarde la matrice de confusion.
     """
@@ -165,9 +167,10 @@ def afficher_matrice_confusion(y_test_raw, y_pred):
     ax.set_title('Matrice de confusion (% par ligne)', fontsize=13)
 
     plt.tight_layout()
-    plt.savefig('matrice_confusion.png', dpi=100)
+    chemin_save = os.path.join(dossier_resultats, 'matrice_confusion.png')
+    plt.savefig(chemin_save, dpi=100)
     plt.show()
-    print("  Sauvegardée : matrice_confusion.png")
+    print(f"  Sauvegardée : {chemin_save}")
 
     # Analyse des erreurs critiques
     print("\n  Erreurs critiques (confusion entre classes tumorales) :")
@@ -263,7 +266,7 @@ def afficher_sensibilite_f2(y_test_raw, y_pred):
 # AUC > 0.95 → excellent pour un diagnostic médical
 # =============================================================
 
-def afficher_roc_auc(y_test_raw, y_proba):
+def afficher_roc_auc(y_test_raw, y_proba, dossier_resultats="."):
     """
     Calcule et affiche les courbes ROC pour chaque classe.
     Utilise la stratégie One-vs-Rest : pour chaque classe,
@@ -304,9 +307,10 @@ def afficher_roc_auc(y_test_raw, y_proba):
     ax.set_ylim([0, 1.02])
 
     plt.tight_layout()
-    plt.savefig('roc_auc.png', dpi=100)
+    chemin_save = os.path.join(dossier_resultats, 'roc_auc.png')
+    plt.savefig(chemin_save, dpi=100)
     plt.show()
-    print("  Sauvegardée : roc_auc.png")
+    print(f"  Sauvegardée : {chemin_save}")
 
 
 # =============================================================
@@ -318,7 +322,7 @@ def afficher_roc_auc(y_test_raw, y_proba):
 # Ce graphique montre combien d'images sont dans ce cas.
 # =============================================================
 
-def afficher_distribution_confiances(y_test_raw, y_pred, confiances):
+def afficher_distribution_confiances(y_test_raw, y_pred, confiances, dossier_resultats="."):
     """
     Montre la distribution des scores de confiance
     et identifie les cas qui nécessitent une révision humaine.
@@ -355,9 +359,10 @@ def afficher_distribution_confiances(y_test_raw, y_pred, confiances):
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig('distribution_confiances.png', dpi=100)
+    chemin_save = os.path.join(dossier_resultats, 'distribution_confiances.png')
+    plt.savefig(chemin_save, dpi=100)
     plt.show()
-    print("  Sauvegardée : distribution_confiances.png")
+    print(f"  Sauvegardée : {chemin_save}")
 
 
 # =============================================================
@@ -369,11 +374,20 @@ def evaluer_complet(chemin_modele, X_test, y_test, y_test_raw):
     Lance l'évaluation complète dans l'ordre logique.
     Appeler cette fonction depuis main.py.
     """
+    nom_modele = os.path.basename(chemin_modele).replace('.keras', '')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dossier_resultats = os.path.join("results", f"{nom_modele}_{timestamp}")
+    os.makedirs(dossier_resultats, exist_ok=True)
+
     print("\n" + "=" * 55)
     print("ÉVALUATION COMPLÈTE — PHASE DE TEST")
+    print(f"Dossier de résultats : {dossier_resultats}")
     print("=" * 55)
     print("Chargement du modèle sauvegardé...")
-    model = load_model(chemin_modele)
+    # On ajoute compile=False pour éviter l'erreur liée à l'optimizer Adam (Keras/TF versions issue)
+    model = load_model(chemin_modele, compile=False)
+    # Re-compilation manuelle nécessaire pour pouvoir utiliser model.evaluate()
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
     # 1. Prédictions
     y_proba, y_pred, confiances = preparer_predictions(
@@ -384,20 +398,20 @@ def evaluer_complet(chemin_modele, X_test, y_test, y_test_raw):
     afficher_score_global(model, X_test, y_test)
 
     # 3. Matrice de confusion
-    afficher_matrice_confusion(y_test_raw, y_pred)
+    afficher_matrice_confusion(y_test_raw, y_pred, dossier_resultats)
 
     # 4. Sensibilité + F2
     afficher_sensibilite_f2(y_test_raw, y_pred)
 
     # 5. ROC-AUC
-    afficher_roc_auc(y_test_raw, y_proba)
+    afficher_roc_auc(y_test_raw, y_proba, dossier_resultats)
 
     # 6. Confiances
-    afficher_distribution_confiances(y_test_raw, y_pred, confiances)
+    afficher_distribution_confiances(y_test_raw, y_pred, confiances, dossier_resultats)
 
     print("\n" + "=" * 55)
     print("ÉVALUATION TERMINÉE")
-    print("Fichiers générés :")
+    print(f"Fichiers générés dans : {dossier_resultats}/")
     print("  - matrice_confusion.png")
     print("  - roc_auc.png")
     print("  - distribution_confiances.png")

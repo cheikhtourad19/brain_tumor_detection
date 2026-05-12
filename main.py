@@ -1,7 +1,8 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
 from src.preprocessing import obtenir_donnees
+
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from src.preprocessing_tl import obtenir_donnees as obtenir_donnees_tl
 import numpy as np
 from src.model import (
@@ -70,7 +71,6 @@ def lancer_entrainement():
     afficher_courbes(historique)
     sauvegarder_modele(model)
     executer_evaluation_complete(X_test, y_test, y_test_raw)
-
 def lancer_evaluation_seule():
     # =========================================================
     # Mode évaluation: on recharge les données + le modèle sauvegardé
@@ -81,7 +81,7 @@ def lancer_evaluation_seule():
     X_test, y_test, y_test_raw = obtenir_donnees(
         CHEMIN_TRAIN,
         CHEMIN_TEST,
-        forcer_recalcul=True
+        forcer_recalcul=False
     )
 
     executer_evaluation_complete(X_test, y_test, y_test_raw)
@@ -105,19 +105,10 @@ def lancer_transfer_learning():
     model = construire_modele_tl()
     afficher_architecture_tl(model)
 
-    labels = y_train_raw
-    classes = np.unique(labels)
-    weights = compute_class_weight('balanced', classes=classes, y=labels)
-    class_weight = {int(c): float(w) for c, w in zip(classes, weights)}
-    class_weight[1] = 2.5
-    class_weight[3] = 1.8
-    print(f"Class weights: {class_weight}")
-
     # =========================================================
     # ÉTAPE 3 : Entraîner
     # =========================================================
-    historique = entrainer_modele_tl(model, X_train, y_train, X_val, y_val,
-                                     class_weight=class_weight)
+    historique = entrainer_modele_tl(model, X_train, y_train, X_val, y_val)
 
     # =========================================================
     # ÉTAPE 3b : Fine-tuning (dégeler dernières couches du backbone)

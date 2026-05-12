@@ -10,8 +10,8 @@ from tensorflow.keras.optimizers.legacy import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.regularizers import l2
 import tensorflow as tf
-from tensorflow.keras.applications import EfficientNetB0
-from tensorflow.keras.applications.efficientnet import preprocess_input
+from tensorflow.keras.applications import EfficientNetV2B0
+from tensorflow.keras.applications.efficientnet_v2 import preprocess_input
 
 IMG_SIZE = 224
 NUM_CLASSES = 4
@@ -31,7 +31,7 @@ else:
 
 
 def construire_modele():
-    base_model = EfficientNetB0(
+    base_model = EfficientNetV2B0(
         weights='imagenet',
         include_top=False,
         input_shape=(IMG_SIZE, IMG_SIZE, 3)
@@ -39,7 +39,7 @@ def construire_modele():
 
     base_model.trainable = False
 
-    model = Sequential(name="Transfer_Learning_EfficientNetB0")
+    model = Sequential(name="Transfer_Learning_EfficientNetV2B0")
     model.add(Input(shape=(IMG_SIZE, IMG_SIZE, 3)))
 
     if DATA_AUGMENTATION is not None:
@@ -49,8 +49,10 @@ def construire_modele():
 
     model.add(GlobalAveragePooling2D())
     model.add(Dropout(0.5))
-    model.add(Dense(256, activation='relu', kernel_regularizer=l2(1e-4)))
-    model.add(Dropout(0.4))
+    model.add(Dense(512, activation='relu'))
+    model.add(Dropout(0.3))
+    model.add(Dense(256, activation='relu'))
+    model.add(Dropout(0.2))
     model.add(Dense(NUM_CLASSES, activation='softmax'))
 
     model.compile(
@@ -87,7 +89,7 @@ def entrainer_modele(model, X_train, y_train, X_val, y_val, class_weight=None):
     print(f"Images val    : {X_val.shape[0]}")
     print(f"Epochs (max)  : {MAX_EPOCHS}")
     print(f"Batch size    : {BATCH_SIZE}")
-    print("Backbone      : EfficientNetB0 (gelé)")
+    print("Backbone      : EfficientNetV2B0 (gelé)")
     if class_weight:
         print(f"Class weight  : {class_weight}")
     print()
@@ -148,7 +150,9 @@ def fine_tune_model(model, X_train, y_train, X_val, y_val,
         print(f"Total layers: {len(base_model.layers)}, unfreezing from index {unfreeze_from}")
         
         for i, layer in enumerate(base_model.layers):
-            if i >= unfreeze_from:
+            # IMPORTANT: We must keep BatchNormalization layers frozen during fine-tuning
+            # Otherwise, the running mean and variance will be updated with the small newly fine-tuned batches, ruining the weights.
+            if i >= unfreeze_from and not isinstance(layer, tf.keras.layers.BatchNormalization):
                 layer.trainable = True
             else:
                 layer.trainable = False
