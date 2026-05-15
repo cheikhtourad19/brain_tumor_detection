@@ -11,20 +11,6 @@ from tensorflow.keras.regularizers import l2
 import matplotlib.pyplot as plt
 import numpy as np
 
-# ⚠️ IMPORTANT: Après chaque entraînement (python main.py),
-# mettre à jour HISTORIQUE_EXPERIMENTATIONS.md avec:
-# - Les logs de sortie (Epoch X/20 ...)
-# - Le diagnostic (stabilité, overfitting, underfitting?)
-# - Le verdict final et étapes suivantes
-
-# =============================================================
-# RAPPEL : ce qu'on veut construire
-#
-# Entrée  → image IRM de taille (128, 128, 3)
-# Sortie  → 4 probabilités  ex: [0.03, 0.08, 0.07, 0.82]
-#                                  ↑       ↑      ↑      ↑
-#                               notumor  mening. pitu. glioma
-# =============================================================
 
 IMG_SIZE    = 128
 NUM_CLASSES = 4
@@ -33,9 +19,7 @@ BATCH_SIZE  = 32
 USE_AUGMENTATION = True
 MODEL_VERSION = "EXP5_encodeur_decodeur_dense"
 
-# Augmentation optionnelle (active uniquement si USE_AUGMENTATION=True).
-# IMPORTANT: un Sequential vide provoque une erreur Keras.
-# Donc on crée le pipeline seulement quand l'augmentation est activée.
+
 if USE_AUGMENTATION:
     DATA_AUGMENTATION = Sequential([
         RandomRotation(0.08),
@@ -150,7 +134,7 @@ def afficher_architecture(model):
 
 
 def entrainer_modele(model, X_train, y_train, X_val, y_val, class_weight=None):
-    #                                                         ↑ ajout ici
+    #                                                         
 
     print("\n" + "=" * 55)
     print("ENTRAÎNEMENT")
@@ -186,7 +170,7 @@ def entrainer_modele(model, X_train, y_train, X_val, y_val, class_weight=None):
         batch_size=BATCH_SIZE,
         validation_data=(X_val, y_val),
         callbacks=callbacks,
-        class_weight=class_weight,   # ← ajout ici
+        class_weight=class_weight,   
         verbose=1
     )
 
